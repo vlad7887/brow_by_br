@@ -238,20 +238,32 @@ checkAlready();
     setTimeout(async () => {
       const phone = await phonePromise;
 
-      const payload = {
-        action: "spin",
-        initData: tg.initData,
-        phone,                 // может быть ""
-        consent: true          // согласие считаем принятием по нажатию "Крутить"
-      };
+try {
+  const res = await fetch(API_SPIN_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ initData: tg.initData, phone })
+  });
+  const data = await res.json();
 
-      tg.sendData(JSON.stringify(payload));
+  if (!data.ok) {
+    resultEl.textContent = "";
+    setStatus("Не удалось получить скидку. Попробуйте открыть колесо ещё раз.");
+    locked = false; refresh();
+    return;
+  }
 
-      resultEl.textContent = `Вам выпала скидка: -${discountVisual}%`;
-      setStatus("Сейчас придёт сообщение от бота. Покажите его мастеру ✅");
+  // Показываем скидку, которую зафиксировал сервер (она главная)
+  resultEl.textContent = `Вам выпала скидка: -${data.discount}%`;
+  setStatus("Скидка зафиксирована ✅ Сейчас придёт сообщение от бота. Покажите его мастеру.");
+  locked = true; refresh();
+  setTimeout(() => tg.close(), 900);
 
-      locked = true; refresh();
-      setTimeout(() => tg.close(), 900);
+} catch (e) {
+  resultEl.textContent = "";
+  setStatus("Ошибка связи. Попробуйте ещё раз.");
+  locked = false; refresh();
+}
     }, 3800);
   };
 
