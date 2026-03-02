@@ -67,14 +67,10 @@
 
       <div class="divider"></div>
 
-      <div class="checkline">
-        <input type="checkbox" id="consent">
-        <label for="consent">Я согласна на обработку данных (телефон нужен, чтобы подтвердить скидку).</label>
-      </div>
-
-      <button class="btn secondary" id="btnContact">📲 Поделиться номером</button>
-      <div class="status">Телефон: <span id="phoneVal">не указан</span></div>
-
+      <p class="fine" style="margin:0 0 10px">
+  Нажимая «Крутить», вы соглашаетесь на обработку данных для выдачи скидки. Номер телефона может быть запрошен Telegram (необязательно).
+</p>
+    
       <div class="wheelBox">
         <div class="pointer"></div>
         <canvas id="wheel" width="640" height="640"></canvas>
@@ -101,7 +97,7 @@
   const canvas = document.getElementById("wheel");
   const ctx = canvas.getContext("2d");
 
-  const wheel = [10,10,10,10,10, 15,15,15,15, 20,20,20, 25,25, 30, 40]; // 16 ячеек, 40 — джекпот
+  const wheel = [5,10,15,5,20, 10,15,5,10, 5,10,15, 5,20, 25, 30]; // 16 ячеек, 30 — джекпот
   const labels = wheel.map(x => `-${x}%`);
 
   const colorsA = ["#ff4fa3","#ff7bbd","#ffd1e6","#c6b7ff","#9fd6ff","#ffb3d6","#f3a7ff","#b7f0ff"];
