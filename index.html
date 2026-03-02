@@ -93,8 +93,7 @@
   if (!tg) { statusEl.innerHTML = '<span class="err">Откройте колесо внутри Telegram.</span>'; return; }
 
   tg.ready(); tg.expand();
-  // ВСТАВЬ СЮДА URL СВОЕГО WORKER (пример ниже)
-const BACKEND_STATUS_URL = "https://YOUR-WORKER.workers.dev/api/status";
+const API_SPIN_URL = "https://browwheel-api.vladislav9608.workers.dev/api/spin";
 
 async function checkAlready() {
   try {
