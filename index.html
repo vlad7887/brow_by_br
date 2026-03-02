@@ -163,10 +163,13 @@
   btnContact.onclick = () => {
     if (!consentEl.checked) { setStatus('<span class="err">Нужно согласие на обработку данных.</span>'); return; }
     tg.requestContact((ok, contact) => {
-      if (!ok) return;
-      phone = contact?.phone_number || "";
-      phoneVal.textContent = phone || "не указан";
-      setStatus(phone ? '<span class="ok">Номер получен ✅</span>' : '<span class="err">Не удалось получить номер.</span>');
+      if (!ok) {
+  setStatus('<span class="err">Номер не передан. Это не обязательно 👍</span>');
+  return;
+}
+phone = contact?.phone_number || "";
+phoneVal.textContent = phone || "не указан";
+setStatus('<span class="ok">Номер получен ✅</span>');
       refresh();
     });
   };
