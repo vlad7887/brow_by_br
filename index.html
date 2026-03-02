@@ -97,18 +97,18 @@
   const canvas = document.getElementById("wheel");
   const ctx = canvas.getContext("2d");
 
-  const wheel = [5,10,15,5,20, 10,15,5,10, 5,10,15, 5,20, 25, 30]; // 16 ячеек, 30 — джекпот
+  // 16 ячеек, 40% джекпот
+  const wheel = [10,10,10,10,10, 15,15,15,15, 20,20,20, 25,25, 30, 40];
   const labels = wheel.map(x => `-${x}%`);
 
   const colorsA = ["#ff4fa3","#ff7bbd","#ffd1e6","#c6b7ff","#9fd6ff","#ffb3d6","#f3a7ff","#b7f0ff"];
   const colorsB = ["#ff2f96","#ff65b4","#ffc2df","#b5a2ff","#83ccff","#ff9dcb","#ea8cff","#9be7ff"];
 
-  let currentRotation = 0, spinning = false, phone = "", locked = false;
+  let currentRotation = 0;
+  let spinning = false;
+  let locked = false;
 
-  const btnContact = document.getElementById("btnContact");
   const btnSpin = document.getElementById("btnSpin");
-  const consentEl = document.getElementById("consent");
-  const phoneVal = document.getElementById("phoneVal");
   const resultEl = document.getElementById("result");
 
   function drawWheel(rotationRad = 0) {
@@ -150,25 +150,11 @@
     ctx.lineWidth = 6;
     ctx.stroke();
   }
+
   drawWheel(0);
 
   function setStatus(html){ statusEl.innerHTML = html || ""; }
-  function refresh(){ btnSpin.disabled = !(consentEl.checked  && !spinning && !locked); }
-  consentEl.addEventListener("change", refresh);
-
-  btnContact.onclick = () => {
-    if (!consentEl.checked) { setStatus('<span class="err">Нужно согласие на обработку данных.</span>'); return; }
-    tg.requestContact((ok, contact) => {
-      if (!ok) {
-  setStatus('<span class="err">Номер не передан. Это не обязательно 👍</span>');
-  return;
-}
-phone = contact?.phone_number || "";
-phoneVal.textContent = phone || "не указан";
-setStatus('<span class="ok">Номер получен ✅</span>');
-      refresh();
-    });
-  };
+  function refresh(){ btnSpin.disabled = spinning || locked; }
 
   function easeOutCubic(t){ return 1 - Math.pow(1-t, 3); }
 
@@ -200,17 +186,51 @@ setStatus('<span class="ok">Номер получен ✅</span>');
     requestAnimationFrame(tick);
   }
 
-  btnSpin.onclick = () => {
+  // Пытаемся получить номер. Если не дали — вернём пустую строку.
+  function requestPhoneOrEmpty() {
+    return new Promise((resolve) => {
+      // На некоторых клиентах requestContact может быть недоступен — тогда просто пропускаем
+      if (!tg.requestContact) return resolve("");
+
+      try {
+        tg.requestContact((ok, contact) => {
+          if (!ok) return resolve("");
+          resolve(contact?.phone_number || "");
+        });
+      } catch {
+        resolve("");
+      }
+    });
+  }
+
+  btnSpin.onclick = async () => {
     if (btnSpin.disabled) return;
+
+    // 1) выбираем сектор для анимации
     const targetIndex = Math.floor(Math.random() * wheel.length);
-    const discount = wheel[targetIndex];
+    const discountVisual = wheel[targetIndex];
     spinToIndex(targetIndex);
 
-    setTimeout(() => {
-      const payload = { action:"spin", initData: tg.initData, phone, consent:true };
+    // 2) параллельно попросим номер (если пользователь подтвердит — получим)
+    setStatus("Если появится запрос Telegram — подтвердите номер (не обязательно).");
+    const phonePromise = requestPhoneOrEmpty();
+
+    // 3) после анимации отправляем данные в бот
+    setTimeout(async () => {
+      const phone = await phonePromise;
+
+      const payload = {
+        action: "spin",
+        initData: tg.initData,
+        phone,                 // может быть ""
+        consent: true          // согласие считаем принятием по нажатию "Крутить"
+      };
+
       tg.sendData(JSON.stringify(payload));
-      resultEl.textContent = `Вам выпала скидка: -${discount}%`;
+
+      resultEl.textContent = `Вам выпала скидка: -${discountVisual}%`;
       setStatus("Сейчас придёт сообщение от бота. Покажите его мастеру ✅");
+
       locked = true; refresh();
       setTimeout(() => tg.close(), 900);
     }, 3800);
