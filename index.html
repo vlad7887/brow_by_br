@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Колесо фортуны</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root{
+      --bg1:#0f0f12; --bg2:#191922; --text:#f4f4f7; --muted:#b7b7c7;
+      --accent:#ff4fa3; --accent2:#ffd1e6; --good:#36d399; --bad:#ff6b6b;
+      --stroke:rgba(255,255,255,.12);
+    }
+    html,body{height:100%; margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif;
+      background: radial-gradient(1200px 600px at 30% 0%, #2a2030 0%, transparent 60%), linear-gradient(180deg,var(--bg1),var(--bg2));
+      color:var(--text);}
+    .wrap{max-width:460px; margin:0 auto; padding:18px 16px 28px;}
+    .card{background:rgba(21,21,28,.82); border:1px solid var(--stroke); border-radius:18px; padding:16px; backdrop-filter: blur(10px);}
+    .title{font-size:20px; font-weight:800; margin:0 0 6px;}
+    .sub{margin:0 0 12px; color:var(--muted); line-height:1.35}
+    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    .pill{display:inline-flex; gap:8px; align-items:center; padding:8px 10px; border-radius:999px; border:1px solid var(--stroke);
+      color:var(--muted); font-size:13px}
+    .pill b{color:var(--text)}
+    .wheelBox{position:relative; display:flex; justify-content:center; align-items:center; margin:14px auto 12px;}
+    canvas{width:320px; height:320px; border-radius:50%; box-shadow: 0 18px 50px rgba(0,0,0,.45);
+      background: radial-gradient(circle at 30% 20%, rgba(255,255,255,.08), transparent 60%);}
+    .pointer{position:absolute; top:-6px; width:0; height:0;
+      border-left:14px solid transparent; border-right:14px solid transparent; border-bottom:26px solid var(--accent);
+      filter: drop-shadow(0 8px 12px rgba(0,0,0,.5));}
+    .centerBadge{position:absolute; width:86px; height:86px; border-radius:50%;
+      background: radial-gradient(circle at 30% 25%, rgba(255,255,255,.22), rgba(255,255,255,.04) 60%),
+      linear-gradient(180deg, rgba(255,79,163,.35), rgba(255,209,230,.10));
+      border:1px solid rgba(255,255,255,.18); display:flex; align-items:center; justify-content:center;
+      box-shadow: inset 0 0 0 10px rgba(255,255,255,.03), 0 10px 30px rgba(0,0,0,.35);
+      font-weight:900; letter-spacing:.6px; text-transform:uppercase; font-size:12px;}
+    .btn{width:100%; border:0; border-radius:14px; padding:14px; font-size:15px; font-weight:800; cursor:pointer;
+      color:#121218; background: linear-gradient(180deg, var(--accent2), var(--accent)); box-shadow: 0 12px 28px rgba(255,79,163,.25);}
+    .btn:disabled{opacity:.45; cursor:not-allowed; box-shadow:none}
+    .btn.secondary{background: transparent; color: var(--text); border:1px solid var(--stroke); box-shadow:none; font-weight:700;}
+    .fine{font-size:12px; color:var(--muted); line-height:1.35; margin-top:10px}
+    .divider{height:1px; background:var(--stroke); margin:12px 0}
+    .result{font-size:18px; font-weight:900; margin:8px 0 0}
+    .status{margin-top:8px; color:var(--muted); font-size:13px}
+    .ok{color:var(--good); font-weight:800}
+    .err{color:var(--bad); font-weight:800}
+    .checkline{display:flex; gap:10px; align-items:flex-start; margin:10px 0 12px}
+    .checkline input{width:18px; height:18px; margin-top:2px}
+    .checkline label{font-size:13px; color:var(--muted); line-height:1.35}
+    .tag{display:inline-flex; padding:6px 10px; border-radius:999px; border:1px solid rgba(255,79,163,.35);
+      color:var(--accent2); font-size:12px; font-weight:800;}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <h1 class="title">Колесо фортуны к 8 марта</h1>
+        <span class="tag">-10%…-40%</span>
+      </div>
+      <p class="sub">Крути 1 раз и получи скидку. Итог придёт сообщением в Telegram — покажи его мастеру.</p>
+      <div class="row">
+        <span class="pill">📅 до <b>07.03</b> включительно</span>
+        <span class="pill">🧾 16 ячеек</span>
+        <span class="pill">🆔 1 попытка</span>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="checkline">
+        <input type="checkbox" id="consent">
+        <label for="consent">Я согласна на обработку данных (телефон нужен, чтобы подтвердить скидку).</label>
+      </div>
+
+      <button class="btn secondary" id="btnContact">📲 Поделиться номером</button>
+      <div class="status">Телефон: <span id="phoneVal">не указан</span></div>
+
+      <div class="wheelBox">
+        <div class="pointer"></div>
+        <canvas id="wheel" width="640" height="640"></canvas>
+        <div class="centerBadge">Spin</div>
+      </div>
+
+      <button class="btn" id="btnSpin" disabled>🎡 Крутить</button>
+
+      <div class="result" id="result"></div>
+      <div class="status" id="status"></div>
+
+      <p class="fine">Скидка фиксируется по Telegram ID. Повторное участие невозможно.</p>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const tg = window.Telegram?.WebApp;
+  const statusEl = document.getElementById("status");
+  if (!tg) { statusEl.innerHTML = '<span class="err">Откройте колесо внутри Telegram.</span>'; return; }
+
+  tg.ready(); tg.expand();
+
+  const canvas = document.getElementById("wheel");
+  const ctx = canvas.getContext("2d");
+
+  const wheel = [10,10,10,10,10, 15,15,15,15, 20,20,20, 25,25, 30, 40]; // 16 ячеек, 40 — джекпот
+  const labels = wheel.map(x => `-${x}%`);
+
+  const colorsA = ["#ff4fa3","#ff7bbd","#ffd1e6","#c6b7ff","#9fd6ff","#ffb3d6","#f3a7ff","#b7f0ff"];
+  const colorsB = ["#ff2f96","#ff65b4","#ffc2df","#b5a2ff","#83ccff","#ff9dcb","#ea8cff","#9be7ff"];
+
+  let currentRotation = 0, spinning = false, phone = "", locked = false;
+
+  const btnContact = document.getElementById("btnContact");
+  const btnSpin = document.getElementById("btnSpin");
+  const consentEl = document.getElementById("consent");
+  const phoneVal = document.getElementById("phoneVal");
+  const resultEl = document.getElementById("result");
+
+  function drawWheel(rotationRad = 0) {
+    const cx = canvas.width / 2, cy = canvas.height / 2;
+    const r = Math.min(cx, cy) - 16;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(rotationRad);
+
+    const n = labels.length;
+    const step = (Math.PI * 2) / n;
+
+    for (let i=0; i<n; i++) {
+      const start = i*step, end = start + step;
+      ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,r,start,end); ctx.closePath();
+      const c = (i % 2 === 0) ? colorsA[i % colorsA.length] : colorsB[i % colorsB.length];
+      ctx.fillStyle = c; ctx.fill();
+
+      ctx.strokeStyle = "rgba(255,255,255,.16)";
+      ctx.lineWidth = 3; ctx.stroke();
+
+      ctx.save();
+      ctx.rotate(start + step/2);
+      ctx.textAlign = "right";
+      ctx.fillStyle = "rgba(15,15,18,.92)";
+      ctx.font = "900 42px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+      ctx.shadowColor = "rgba(255,255,255,.28)";
+      ctx.shadowBlur = 6;
+      ctx.fillText(labels[i], r - 22, 14);
+      ctx.restore();
+    }
+    ctx.restore();
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r+2, 0, Math.PI*2);
+    ctx.strokeStyle = "rgba(255,255,255,.20)";
+    ctx.lineWidth = 6;
+    ctx.stroke();
+  }
+  drawWheel(0);
+
+  function setStatus(html){ statusEl.innerHTML = html || ""; }
+  function refresh(){ btnSpin.disabled = !(consentEl.checked && phone && !spinning && !locked); }
+  consentEl.addEventListener("change", refresh);
+
+  btnContact.onclick = () => {
+    if (!consentEl.checked) { setStatus('<span class="err">Нужно согласие на обработку данных.</span>'); return; }
+    tg.requestContact((ok, contact) => {
+      if (!ok) return;
+      phone = contact?.phone_number || "";
+      phoneVal.textContent = phone || "не указан";
+      setStatus(phone ? '<span class="ok">Номер получен ✅</span>' : '<span class="err">Не удалось получить номер.</span>');
+      refresh();
+    });
+  };
+
+  function easeOutCubic(t){ return 1 - Math.pow(1-t, 3); }
+
+  function spinToIndex(targetIndex) {
+    const n = labels.length;
+    const step = (Math.PI * 2) / n;
+    const pointerAngle = -Math.PI / 2;
+    const centerAngle = (targetIndex * step) + step/2;
+    const desiredRotation = pointerAngle - centerAngle;
+    const extraSpins = 6;
+    const finalRotation = desiredRotation - (Math.PI * 2 * extraSpins);
+
+    const startRot = currentRotation;
+    const delta = finalRotation - startRot;
+    const duration = 3200 + Math.random()*700;
+    const start = performance.now();
+
+    spinning = true; refresh();
+    setStatus("Крутим… ✨"); resultEl.textContent = "";
+
+    function tick(now) {
+      const t = Math.min(1, (now - start) / duration);
+      const k = easeOutCubic(t);
+      currentRotation = startRot + delta * k;
+      drawWheel(currentRotation);
+      if (t < 1) requestAnimationFrame(tick);
+      else { spinning = false; refresh(); }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  btnSpin.onclick = () => {
+    if (btnSpin.disabled) return;
+    const targetIndex = Math.floor(Math.random() * wheel.length);
+    const discount = wheel[targetIndex];
+    spinToIndex(targetIndex);
+
+    setTimeout(() => {
+      const payload = { action:"spin", initData: tg.initData, phone, consent:true };
+      tg.sendData(JSON.stringify(payload));
+      resultEl.textContent = `Вам выпала скидка: -${discount}%`;
+      setStatus("Сейчас придёт сообщение от бота. Покажите его мастеру ✅");
+      locked = true; refresh();
+      setTimeout(() => tg.close(), 900);
+    }, 3800);
+  };
+
+  refresh();
+})();
+</script>
+</body>
+</html>
