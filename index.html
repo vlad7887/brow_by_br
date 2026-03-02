@@ -157,7 +157,7 @@
   drawWheel(0);
 
   function setStatus(html){ statusEl.innerHTML = html || ""; }
-  function refresh(){ btnSpin.disabled = !(consentEl.checked && phone && !spinning && !locked); }
+  function refresh(){ btnSpin.disabled = !(consentEl.checked  && !spinning && !locked); }
   consentEl.addEventListener("change", refresh);
 
   btnContact.onclick = () => {
