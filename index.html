@@ -205,23 +205,6 @@ checkAlready();
     requestAnimationFrame(tick);
   }
 
-  // Пытаемся получить номер. Если не дали — вернём пустую строку.
-  function requestPhoneOrEmpty() {
-    return new Promise((resolve) => {
-      // На некоторых клиентах requestContact может быть недоступен — тогда просто пропускаем
-      if (!tg.requestContact) return resolve("");
-
-      try {
-        tg.requestContact((ok, contact) => {
-          if (!ok) return resolve("");
-          resolve(contact?.phone_number || "");
-        });
-      } catch {
-        resolve("");
-      }
-    });
-  }
-
   btnSpin.onclick = async () => {
     if (btnSpin.disabled) return;
 
@@ -236,35 +219,35 @@ checkAlready();
 
     // 3) после анимации отправляем данные в бот
     setTimeout(async () => {
-      const phone = await phonePromise;
+  try {
+    const res = await fetch(API_SPIN_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ initData: tg.initData })
+    });
 
-try {
-  const res = await fetch(API_SPIN_URL, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ initData: tg.initData, phone })
-  });
-  const data = await res.json();
+    const data = await res.json();
 
-  if (!data.ok) {
+    if (!data.ok) {
+      resultEl.textContent = "";
+      setStatus("Не удалось получить скидку. Попробуйте открыть колесо ещё раз.");
+      locked = false; refresh();
+      return;
+    }
+
+    // Показываем скидку, которую зафиксировал сервер (она главная)
+    resultEl.textContent = `Вам выпала скидка: -${data.discount}%`;
+    setStatus("Скидка зафиксирована ✅ Сейчас придёт сообщение от бота. Покажите его мастеру.");
+
+    locked = true; refresh();
+    setTimeout(() => tg.close(), 900);
+
+  } catch (e) {
     resultEl.textContent = "";
-    setStatus("Не удалось получить скидку. Попробуйте открыть колесо ещё раз.");
+    setStatus("Ошибка связи. Попробуйте ещё раз.");
     locked = false; refresh();
-    return;
   }
-
-  // Показываем скидку, которую зафиксировал сервер (она главная)
-  resultEl.textContent = `Вам выпала скидка: -${data.discount}%`;
-  setStatus("Скидка зафиксирована ✅ Сейчас придёт сообщение от бота. Покажите его мастеру.");
-  locked = true; refresh();
-  setTimeout(() => tg.close(), 900);
-
-} catch (e) {
-  resultEl.textContent = "";
-  setStatus("Ошибка связи. Попробуйте ещё раз.");
-  locked = false; refresh();
-}
-    }, 3800);
+}, 3800);
   };
 
   refresh();
