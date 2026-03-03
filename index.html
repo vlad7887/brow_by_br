@@ -183,6 +183,14 @@
     }
     requestAnimationFrame(tick);
   }
+  function pickIndexForDiscount(discount) {
+  const indices = [];
+  for (let i = 0; i < wheel.length; i++) {
+    if (wheel[i] === discount) indices.push(i);
+  }
+  if (!indices.length) return 0;
+  return indices[Math.floor(Math.random() * indices.length)];
+}
 
   // Проверяем, участвовал ли уже
   async function checkAlready() {
@@ -203,45 +211,51 @@
       // не критично
     }
   }
+btnSpin.onclick = async () => {
+  if (btnSpin.disabled) return;
 
-  btnSpin.onclick = async () => {
-    if (btnSpin.disabled) return;
+  locked = true; refresh();
+  resultEl.textContent = "";
+  setStatus("Фиксируем скидку…");
 
-    // Локальная анимация
-    const targetIndex = Math.floor(Math.random() * wheel.length);
+  try {
+    const res = await fetch(API_SPIN_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ initData: tg.initData })
+    });
+
+    const data = await res.json();
+
+    if (!data.ok) {
+      locked = false; refresh();
+      setStatus("Не удалось получить скидку. Откройте колесо заново.");
+      return;
+    }
+
+    // Если уже участвовал — просто показываем и выходим (без крутилки)
+    if (data.already) {
+      resultEl.textContent = `Вы уже участвовали ✅ Ваша скидка: -${data.discount}%`;
+      setStatus("Скидка уже зафиксирована. Покажите сообщение из бота мастеру.");
+      return;
+    }
+
+    // Крутим колесо ИМЕННО на ту скидку, что вернул сервер
+    const targetIndex = pickIndexForDiscount(data.discount);
     spinToIndex(targetIndex);
 
-    // Блокируем повторные нажатия сразу
-    locked = true; refresh();
-    setStatus("Фиксируем скидку…");
-
-    // После анимации — фиксируем на сервере
-    setTimeout(async () => {
-      try {
-        const res = await fetch(API_SPIN_URL, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ initData: tg.initData })
-        });
-
-        const data = await res.json();
-
-        if (!data.ok) {
-          locked = false; refresh();
-          setStatus("Не удалось получить скидку. Откройте колесо заново.");
-          return;
-        }
-
-        resultEl.textContent = `Вам выпала скидка: -${data.discount}%`;
-        setStatus("Готово ✅ Сейчас придёт сообщение от бота. Покажите его мастеру.");
-
-        setTimeout(() => tg.close(), 900);
-      } catch (e) {
-        locked = false; refresh();
-        setStatus("Ошибка связи с сервером. Попробуйте ещё раз.");
-      }
+    // После остановки показываем тот же результат
+    setTimeout(() => {
+      resultEl.textContent = `Вам выпала скидка: -${data.discount}%`;
+      setStatus("Готово ✅ Сейчас придёт сообщение от бота. Покажите его мастеру.");
+      setTimeout(() => tg.close(), 900);
     }, 3900);
-  };
+
+  } catch (e) {
+    locked = false; refresh();
+    setStatus("Ошибка связи с сервером. Попробуйте ещё раз.");
+  }
+};
 
   drawWheel(0);
   refresh();
