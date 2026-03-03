@@ -23,173 +23,229 @@
       color:var(--muted); font-size:13px}
     .pill b{color:var(--text)}
     .wheelBox{position:relative; display:flex; justify-content:center; align-items:center; margin:14px auto 12px;}
-    canvas{width:320px; height:320px; border-radius:50%; box-shadow: 0 18px 50px rgba(0,0,0,.45);}
+    canvas{width:320px; height:320px; border-radius:50%; box-shadow: 0 18px 50px rgba(0,0,0,.45);
+      background: radial-gradient(circle at 30% 20%, rgba(255,255,255,.08), transparent 60%);}
     .pointer{position:absolute; top:-6px; width:0; height:0;
-      border-left:14px solid transparent; border-right:14px solid transparent; border-bottom:26px solid var(--accent);}
+      border-left:14px solid transparent; border-right:14px solid transparent; border-bottom:26px solid var(--accent);
+      filter: drop-shadow(0 8px 12px rgba(0,0,0,.5));}
+    .centerBadge{position:absolute; width:86px; height:86px; border-radius:50%;
+      background: radial-gradient(circle at 30% 25%, rgba(255,255,255,.22), rgba(255,255,255,.04) 60%),
+      linear-gradient(180deg, rgba(255,79,163,.35), rgba(255,209,230,.10));
+      border:1px solid rgba(255,255,255,.18); display:flex; align-items:center; justify-content:center;
+      box-shadow: inset 0 0 0 10px rgba(255,255,255,.03), 0 10px 30px rgba(0,0,0,.35);
+      font-weight:900; letter-spacing:.6px; text-transform:uppercase; font-size:12px;}
     .btn{width:100%; border:0; border-radius:14px; padding:14px; font-size:15px; font-weight:800; cursor:pointer;
-      color:#121218; background: linear-gradient(180deg, var(--accent2), var(--accent));}
-    .btn:disabled{opacity:.45; cursor:not-allowed;}
-    .result{font-size:18px; font-weight:900; margin-top:10px}
-    .status{margin-top:6px; color:var(--muted); font-size:13px}
+      color:#121218; background: linear-gradient(180deg, var(--accent2), var(--accent)); box-shadow: 0 12px 28px rgba(255,79,163,.25);}
+    .btn:disabled{opacity:.45; cursor:not-allowed; box-shadow:none}
+    .fine{font-size:12px; color:var(--muted); line-height:1.35; margin-top:10px}
+    .divider{height:1px; background:var(--stroke); margin:12px 0}
+    .result{font-size:18px; font-weight:900; margin:8px 0 0}
+    .status{margin-top:8px; color:var(--muted); font-size:13px}
+    .ok{color:var(--good); font-weight:800}
+    .err{color:var(--bad); font-weight:800}
+    .tag{display:inline-flex; padding:6px 10px; border-radius:999px; border:1px solid rgba(255,79,163,.35);
+      color:var(--accent2); font-size:12px; font-weight:800;}
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
-      <h1 class="title">Колесо фортуны к 8 марта</h1>
-      <p class="sub">Крутите 1 раз и получите скидку. Повторное участие невозможно.</p>
+      <div class="row" style="justify-content:space-between">
+        <h1 class="title">Колесо фортуны к 8 марта</h1>
+        <span class="tag">-5%…-30%</span>
+      </div>
+
+      <p class="sub">
+        Нажмите «Крутить» 1 раз и получите скидку. Подтверждение придёт сообщением в Telegram — покажите его мастеру.
+      </p>
+
+      <div class="row">
+        <span class="pill">📅 до <b>07.03</b> включительно</span>
+        <span class="pill">🧾 16 ячеек</span>
+        <span class="pill">🆔 1 попытка</span>
+      </div>
+
+      <div class="divider"></div>
 
       <div class="wheelBox">
         <div class="pointer"></div>
         <canvas id="wheel" width="640" height="640"></canvas>
+        <div class="centerBadge">Spin</div>
       </div>
 
       <button class="btn" id="btnSpin">🎡 Крутить</button>
+
       <div class="result" id="result"></div>
       <div class="status" id="status"></div>
+
+      <p class="fine">Скидка фиксируется по Telegram ID. Повторное участие невозможно.</p>
     </div>
   </div>
 
 <script>
 (() => {
   const tg = window.Telegram?.WebApp;
-  if (!tg) return;
+  const statusEl = document.getElementById("status");
+  const resultEl = document.getElementById("result");
+  const btnSpin = document.getElementById("btnSpin");
 
-  tg.ready();
-  tg.expand();
+  if (!tg) { statusEl.innerHTML = '<span class="err">Откройте колесо внутри Telegram.</span>'; return; }
+  tg.ready(); tg.expand();
 
+  // === ВАЖНО: проверь, что URL твоего Worker правильный ===
   const API_BASE = "https://browwheel-api.vladislav9608.workers.dev";
-  const API_STATUS = API_BASE + "/api/status";
-  const API_SPIN = API_BASE + "/api/spin";
+  const API_STATUS_URL = API_BASE + "/api/status";
+  const API_SPIN_URL   = API_BASE + "/api/spin";
 
   const canvas = document.getElementById("wheel");
   const ctx = canvas.getContext("2d");
-  const btn = document.getElementById("btnSpin");
-  const resultEl = document.getElementById("result");
-  const statusEl = document.getElementById("status");
 
+  // Визуальные значения (не обязательно совпадают 1-в-1 с сервером, но у нас совпадают)
   const wheel = [5,5,5,5,5, 10,10,10,10, 15,15,15, 20,20, 25, 30];
   const labels = wheel.map(x => `-${x}%`);
 
-  let rotation = 0;
+  const colorsA = ["#ff4fa3","#ff7bbd","#ffd1e6","#c6b7ff","#9fd6ff","#ffb3d6","#f3a7ff","#b7f0ff"];
+  const colorsB = ["#ff2f96","#ff65b4","#ffc2df","#b5a2ff","#83ccff","#ff9dcb","#ea8cff","#9be7ff"];
+
+  let currentRotation = 0;
+  let spinning = false;
   let locked = false;
 
-  function draw(rot=0){
-    const cx = canvas.width/2;
-    const cy = canvas.height/2;
-    const r = cx - 16;
+  function setStatus(html){ statusEl.innerHTML = html || ""; }
+  function refresh(){ btnSpin.disabled = spinning || locked; }
+
+  function drawWheel(rotationRad = 0) {
+    const cx = canvas.width / 2, cy = canvas.height / 2;
+    const r = Math.min(cx, cy) - 16;
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
     ctx.save();
-    ctx.translate(cx,cy);
-    ctx.rotate(rot);
+    ctx.translate(cx, cy);
+    ctx.rotate(rotationRad);
 
-    const step = 2*Math.PI/labels.length;
-    for(let i=0;i<labels.length;i++){
-      ctx.beginPath();
-      ctx.moveTo(0,0);
-      ctx.arc(0,0,r,i*step,(i+1)*step);
-      ctx.closePath();
-      ctx.fillStyle = i%2 ? "#ff4fa3" : "#ffd1e6";
-      ctx.fill();
+    const n = labels.length;
+    const step = (Math.PI * 2) / n;
+
+    for (let i=0; i<n; i++) {
+      const start = i*step, end = start + step;
+      ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,r,start,end); ctx.closePath();
+      const c = (i % 2 === 0) ? colorsA[i % colorsA.length] : colorsB[i % colorsB.length];
+      ctx.fillStyle = c; ctx.fill();
+
+      ctx.strokeStyle = "rgba(255,255,255,.16)";
+      ctx.lineWidth = 3; ctx.stroke();
 
       ctx.save();
-      ctx.rotate(i*step+step/2);
-      ctx.textAlign="right";
-      ctx.fillStyle="#000";
-      ctx.font="bold 36px Arial";
-      ctx.fillText(labels[i],r-20,10);
+      ctx.rotate(start + step/2);
+      ctx.textAlign = "right";
+      ctx.fillStyle = "rgba(15,15,18,.92)";
+      ctx.font = "900 42px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+      ctx.shadowColor = "rgba(255,255,255,.28)";
+      ctx.shadowBlur = 6;
+      ctx.fillText(labels[i], r - 22, 14);
       ctx.restore();
     }
     ctx.restore();
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r+2, 0, Math.PI*2);
+    ctx.strokeStyle = "rgba(255,255,255,.20)";
+    ctx.lineWidth = 6;
+    ctx.stroke();
   }
 
-  function pickIndex(discount){
-    const arr=[];
-    for(let i=0;i<wheel.length;i++)
-      if(wheel[i]===discount) arr.push(i);
-    return arr[Math.floor(Math.random()*arr.length)];
-  }
+  function easeOutCubic(t){ return 1 - Math.pow(1-t, 3); }
 
-  function spinTo(index){
-    const step = 2*Math.PI/wheel.length;
-    const targetAngle = -(index*step + step/2);
-    const final = targetAngle - 6*2*Math.PI;
-    const start = rotation;
-    const delta = final - start;
-    const duration = 3500;
-    const startTime = performance.now();
+  function spinToIndex(targetIndex) {
+    const n = labels.length;
+    const step = (Math.PI * 2) / n;
+    const pointerAngle = -Math.PI / 2;
+    const centerAngle = (targetIndex * step) + step/2;
+    const desiredRotation = pointerAngle - centerAngle;
+    const extraSpins = 6;
+    const finalRotation = desiredRotation - (Math.PI * 2 * extraSpins);
 
-    function anim(t){
-      const p = Math.min(1,(t-startTime)/duration);
-      const eased = 1 - Math.pow(1-p,3);
-      rotation = start + delta*eased;
-      draw(rotation);
-      if(p<1) requestAnimationFrame(anim);
+    const startRot = currentRotation;
+    const delta = finalRotation - startRot;
+    const duration = 3200 + Math.random()*700;
+    const start = performance.now();
+
+    spinning = true; refresh();
+    setStatus("Крутим… ✨"); resultEl.textContent = "";
+
+    function tick(now) {
+      const t = Math.min(1, (now - start) / duration);
+      const k = easeOutCubic(t);
+      currentRotation = startRot + delta * k;
+      drawWheel(currentRotation);
+      if (t < 1) requestAnimationFrame(tick);
+      else { spinning = false; refresh(); }
     }
-    requestAnimationFrame(anim);
+    requestAnimationFrame(tick);
   }
 
-  async function check(){
-    try{
-      const r=await fetch(API_STATUS,{
-        method:"POST",
-        headers:{'content-type':'application/json'},
-        body:JSON.stringify({initData:tg.initData})
+  // Проверяем, участвовал ли уже
+  async function checkAlready() {
+    try {
+      const res = await fetch(API_STATUS_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ initData: tg.initData })
       });
-      const d=await r.json();
-      if(d.ok && d.already){
-        locked=true;
-        btn.disabled=true;
-        resultEl.textContent=`Вы уже участвовали ✅ Ваша скидка: -${d.discount}%`;
+      const data = await res.json();
+      if (data?.ok && data.already) {
+        locked = true;
+        resultEl.textContent = `Вы уже участвовали ✅ Ваша скидка: -${data.discount}%`;
+        setStatus("Скидка уже зафиксирована. Покажите сообщение из бота мастеру.");
+        refresh();
       }
-    }catch{}
-  }
-
-  btn.onclick=async()=>{
-    if(locked) return;
-    locked=true;
-    btn.disabled=true;
-    statusEl.textContent="Фиксируем скидку...";
-
-    try{
-      const r=await fetch(API_SPIN,{
-        method:"POST",
-        headers:{'content-type':'application/json'},
-        body:JSON.stringify({initData:tg.initData})
-      });
-      const d=await r.json();
-
-      if(!d.ok){
-        locked=false;
-        btn.disabled=false;
-        statusEl.textContent="Ошибка. Попробуйте снова.";
-        return;
-      }
-
-      if(d.already){
-        resultEl.textContent=`Вы уже участвовали ✅ Ваша скидка: -${d.discount}%`;
-        return;
-      }
-
-      const index=pickIndex(d.discount);
-      spinTo(index);
-
-      setTimeout(()=>{
-        resultEl.textContent=`Вам выпала скидка: -${d.discount}%`;
-        statusEl.textContent="Сейчас придёт сообщение от бота.";
-        setTimeout(()=>tg.close(),900);
-      },3600);
-
-    }catch{
-      locked=false;
-      btn.disabled=false;
-      statusEl.textContent="Ошибка связи.";
+    } catch {
+      // не критично
     }
+  }
+
+  btnSpin.onclick = async () => {
+    if (btnSpin.disabled) return;
+
+    // Локальная анимация
+    const targetIndex = Math.floor(Math.random() * wheel.length);
+    spinToIndex(targetIndex);
+
+    // Блокируем повторные нажатия сразу
+    locked = true; refresh();
+    setStatus("Фиксируем скидку…");
+
+    // После анимации — фиксируем на сервере
+    setTimeout(async () => {
+      try {
+        const res = await fetch(API_SPIN_URL, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ initData: tg.initData })
+        });
+
+        const data = await res.json();
+
+        if (!data.ok) {
+          locked = false; refresh();
+          setStatus("Не удалось получить скидку. Откройте колесо заново.");
+          return;
+        }
+
+        resultEl.textContent = `Вам выпала скидка: -${data.discount}%`;
+        setStatus("Готово ✅ Сейчас придёт сообщение от бота. Покажите его мастеру.");
+
+        setTimeout(() => tg.close(), 900);
+      } catch (e) {
+        locked = false; refresh();
+        setStatus("Ошибка связи с сервером. Попробуйте ещё раз.");
+      }
+    }, 3900);
   };
 
-  draw();
-  check();
+  drawWheel(0);
+  refresh();
+  checkAlready();
 })();
 </script>
 </body>
