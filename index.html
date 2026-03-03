@@ -37,16 +37,12 @@
     .btn{width:100%; border:0; border-radius:14px; padding:14px; font-size:15px; font-weight:800; cursor:pointer;
       color:#121218; background: linear-gradient(180deg, var(--accent2), var(--accent)); box-shadow: 0 12px 28px rgba(255,79,163,.25);}
     .btn:disabled{opacity:.45; cursor:not-allowed; box-shadow:none}
-    .btn.secondary{background: transparent; color: var(--text); border:1px solid var(--stroke); box-shadow:none; font-weight:700;}
     .fine{font-size:12px; color:var(--muted); line-height:1.35; margin-top:10px}
     .divider{height:1px; background:var(--stroke); margin:12px 0}
     .result{font-size:18px; font-weight:900; margin:8px 0 0}
     .status{margin-top:8px; color:var(--muted); font-size:13px}
     .ok{color:var(--good); font-weight:800}
     .err{color:var(--bad); font-weight:800}
-    .checkline{display:flex; gap:10px; align-items:flex-start; margin:10px 0 12px}
-    .checkline input{width:18px; height:18px; margin-top:2px}
-    .checkline label{font-size:13px; color:var(--muted); line-height:1.35}
     .tag{display:inline-flex; padding:6px 10px; border-radius:999px; border:1px solid rgba(255,79,163,.35);
       color:var(--accent2); font-size:12px; font-weight:800;}
   </style>
@@ -58,7 +54,11 @@
         <h1 class="title">Колесо фортуны к 8 марта</h1>
         <span class="tag">-5%…-30%</span>
       </div>
-      <p class="sub">Крути 1 раз и получи скидку. Итог придёт сообщением в Telegram — покажи его мастеру.</p>
+
+      <p class="sub">
+        Нажмите «Крутить» 1 раз и получите скидку. Подтверждение придёт сообщением в Telegram — покажите его мастеру.
+      </p>
+
       <div class="row">
         <span class="pill">📅 до <b>07.03</b> включительно</span>
         <span class="pill">🧾 16 ячеек</span>
@@ -67,10 +67,6 @@
 
       <div class="divider"></div>
 
-      <p class="fine" style="margin:0 0 10px">
-  Нажимая «Крутить», вы соглашаетесь на обработку данных для выдачи скидки. Номер телефона может быть запрошен Telegram (необязательно).
-</p>
-    
       <div class="wheelBox">
         <div class="pointer"></div>
         <canvas id="wheel" width="640" height="640"></canvas>
@@ -90,33 +86,21 @@
 (() => {
   const tg = window.Telegram?.WebApp;
   const statusEl = document.getElementById("status");
+  const resultEl = document.getElementById("result");
+  const btnSpin = document.getElementById("btnSpin");
+
   if (!tg) { statusEl.innerHTML = '<span class="err">Откройте колесо внутри Telegram.</span>'; return; }
-
   tg.ready(); tg.expand();
-const API_SPIN_URL = "https://browwheel-api.vladislav9608.workers.dev/api/spin";
 
-async function checkAlready() {
-  try {
-    const res = await fetch(BACKEND_STATUS_URL, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ initData: tg.initData })
-    });
-    const data = await res.json();
-    if (data?.ok && data.already) {
-      locked = true;
-      resultEl.textContent = `Вы уже участвовали ✅ Ваша скидка: -${data.discount}%`;
-      setStatus("Скидка уже зафиксирована. Покажите сообщение из бота мастеру.");
-      refresh();
-    }
-  } catch {}
-}
-checkAlready();
+  // === ВАЖНО: проверь, что URL твоего Worker правильный ===
+  const API_BASE = "https://browwheel-api.vladislav9608.workers.dev";
+  const API_STATUS_URL = API_BASE + "/api/status";
+  const API_SPIN_URL   = API_BASE + "/api/spin";
 
   const canvas = document.getElementById("wheel");
   const ctx = canvas.getContext("2d");
 
-  // 16 ячеек, 30% джекпот
+  // Визуальные значения (не обязательно совпадают 1-в-1 с сервером, но у нас совпадают)
   const wheel = [5,5,5,5,5, 10,10,10,10, 15,15,15, 20,20, 25, 30];
   const labels = wheel.map(x => `-${x}%`);
 
@@ -127,8 +111,8 @@ checkAlready();
   let spinning = false;
   let locked = false;
 
-  const btnSpin = document.getElementById("btnSpin");
-  const resultEl = document.getElementById("result");
+  function setStatus(html){ statusEl.innerHTML = html || ""; }
+  function refresh(){ btnSpin.disabled = spinning || locked; }
 
   function drawWheel(rotationRad = 0) {
     const cx = canvas.width / 2, cy = canvas.height / 2;
@@ -170,11 +154,6 @@ checkAlready();
     ctx.stroke();
   }
 
-  drawWheel(0);
-
-  function setStatus(html){ statusEl.innerHTML = html || ""; }
-  function refresh(){ btnSpin.disabled = spinning || locked; }
-
   function easeOutCubic(t){ return 1 - Math.pow(1-t, 3); }
 
   function spinToIndex(targetIndex) {
@@ -205,46 +184,68 @@ checkAlready();
     requestAnimationFrame(tick);
   }
 
-btnSpin.onclick = async () => {
-  if (btnSpin.disabled) return;
-
-  // 1) анимация
-  const targetIndex = Math.floor(Math.random() * wheel.length);
-  spinToIndex(targetIndex);
-
-  locked = true; // блокируем повторные нажатия сразу
-  refresh();
-  setStatus("Фиксируем скидку…");
-
-  // 2) после остановки колеса — фиксируем на сервере
-  setTimeout(async () => {
+  // Проверяем, участвовал ли уже
+  async function checkAlready() {
     try {
-      const res = await fetch(API_SPIN_URL, {
+      const res = await fetch(API_STATUS_URL, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ initData: tg.initData })
       });
-
       const data = await res.json();
-
-      if (!data.ok) {
-        locked = false; refresh();
-        setStatus("Ошибка: сервер не выдал скидку. Откройте колесо заново.");
-        return;
+      if (data?.ok && data.already) {
+        locked = true;
+        resultEl.textContent = `Вы уже участвовали ✅ Ваша скидка: -${data.discount}%`;
+        setStatus("Скидка уже зафиксирована. Покажите сообщение из бота мастеру.");
+        refresh();
       }
-
-      resultEl.textContent = Вам выпала скидка: -${data.discount}%;
-      setStatus("Готово ✅ Сейчас придёт сообщение от бота. Покажите его мастеру.");
-
-      setTimeout(() => tg.close(), 900);
-    } catch (e) {
-      locked = false; refresh();
-      setStatus("Ошибка связи с сервером. Проверьте интернет и попробуйте ещё раз.");
+    } catch {
+      // не критично
     }
-  }, 3900);
-};
+  }
 
+  btnSpin.onclick = async () => {
+    if (btnSpin.disabled) return;
+
+    // Локальная анимация
+    const targetIndex = Math.floor(Math.random() * wheel.length);
+    spinToIndex(targetIndex);
+
+    // Блокируем повторные нажатия сразу
+    locked = true; refresh();
+    setStatus("Фиксируем скидку…");
+
+    // После анимации — фиксируем на сервере
+    setTimeout(async () => {
+      try {
+        const res = await fetch(API_SPIN_URL, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ initData: tg.initData })
+        });
+
+        const data = await res.json();
+
+        if (!data.ok) {
+          locked = false; refresh();
+          setStatus("Не удалось получить скидку. Откройте колесо заново.");
+          return;
+        }
+
+        resultEl.textContent = `Вам выпала скидка: -${data.discount}%`;
+        setStatus("Готово ✅ Сейчас придёт сообщение от бота. Покажите его мастеру.");
+
+        setTimeout(() => tg.close(), 900);
+      } catch (e) {
+        locked = false; refresh();
+        setStatus("Ошибка связи с сервером. Попробуйте ещё раз.");
+      }
+    }, 3900);
+  };
+
+  drawWheel(0);
   refresh();
+  checkAlready();
 })();
 </script>
 </body>
